@@ -34,6 +34,7 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0);pointer-events:none}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.45 var(--ui);-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit}
@@ -144,7 +145,7 @@ input[type=text],input[type=number]{font:inherit;height:36px;padding:0 10px;bord
   <header class="bar">
     <div class="brand"><div class="lockup"><img class="mark" id="logo" alt="PLED"><div class="tag">Iluminación</div></div><div class="sep"></div><span>Probador de luces</span></div>
     <div class="actions">
-      <label class="btn ghost" id="changeBtn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></svg><span class="lbl-long">Cambiar foto</span><input id="file2" type="file" accept="image/*" hidden></label>
+      <label class="btn ghost" id="changeBtn" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></svg><span class="lbl-long">Cambiar foto</span><input id="file2" type="file" accept="image/*" class="vh"></label>
       <button class="btn primary" id="export" type="button" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>Guardar imagen</button>
     </div>
   </header>
@@ -167,7 +168,7 @@ input[type=text],input[type=number]{font:inherit;height:36px;padding:0 10px;bord
       <svg class="garland" viewBox="0 0 300 70" aria-hidden="true"><defs><radialGradient id="gl"><stop offset="0" stop-color="#ffd38a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd38a" stop-opacity="0"/></radialGradient></defs><path d="M4 8 Q150 44 296 8" fill="none" stroke="#0b0d12" stroke-width="2"/><g id="b"></g></svg>
       <h2>Subí una foto del lugar</h2>
       <p>Elegí un producto del catálogo, ubicalo en la foto y miralo prendido de noche. La foto queda en tu teléfono, no se sube a ningún lado.</p>
-      <label class="btn primary">Elegir foto<input id="file" type="file" accept="image/*" hidden></label>
+      <label class="btn primary">Elegir foto<input id="file" type="file" accept="image/*" class="vh"></label>
       <div class="tips"><span>Patio</span><span>Balcón</span><span>Cocina</span><span>Vidriera</span><span>Placard</span></div>
     </div>
     <canvas id="cv" hidden aria-label="Foto con los productos colocados"></canvas>
@@ -236,6 +237,8 @@ const PRODUCTS=[
 const P=Object.fromEntries(PRODUCTS.map(p=>[p.id,p]));
 const fmt=n=>'$'+n.toLocaleString('es-AR');
 const IM={},$=id=>document.getElementById(id);
+// iPhone con iOS 15 no tiene roundRect en el lienzo
+if(!CanvasRenderingContext2D.prototype.roundRect)CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){r=Math.max(0,Math.min(+r||0,Math.abs(w)/2,Math.abs(h)/2));this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);this.closePath()};
 const cv=$('cv'),cx=cv.getContext('2d');
 let photo=null,pxPerCm=4,calibrated=false,items=[],sel=null,night=.86,drag=null,calMode=false,calLine=null;
 const light=document.createElement('canvas'),lg=light.getContext('2d');
@@ -412,13 +415,15 @@ const end=()=>{drag=null;cv.style.cursor='grab'};cv.addEventListener('pointerup'
 /* ---------- foto ---------- */
 function fit(){if(!photo)return;const st=$('stage'),cs=getComputedStyle(st),mob=matchMedia('(max-width:960px)').matches;
   const aw=st.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight),ah=mob?Infinity:st.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom);
-  const s=Math.min(aw/cv.width,ah/cv.height);cv.style.width=Math.floor(cv.width*s)+'px';cv.style.height=Math.floor(cv.height*s)+'px';render()}
+  const s=Math.min(aw/cv.width,ah/cv.height),w=Math.floor(cv.width*s)+'px',h=Math.floor(cv.height*s)+'px';if(cv.style.width===w&&cv.style.height===h&&fit.done===photo)return;fit.done=photo;cv.style.width=w;cv.style.height=h;render()}
 function setPhoto(img){track('foto_subida');const max=2000,s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
-  cv.width=Math.round(img.naturalWidth*s);cv.height=Math.round(img.naturalHeight*s);photo=img;calibrated=false;pxPerCm=cv.width/400;items=[];sel=null;
+  cv.width=Math.round(img.naturalWidth*s);cv.height=Math.round(img.naturalHeight*s);
+  // Se achica una sola vez: las fotos del celular (12 MP) son lentas de redibujar en cada movimiento
+  const pc=document.createElement('canvas');pc.width=cv.width;pc.height=cv.height;pc.getContext('2d').drawImage(img,0,0,pc.width,pc.height);photo=pc;calibrated=false;pxPerCm=cv.width/400;items=[];sel=null;
   $('empty').hidden=true;cv.hidden=false;$('tools').hidden=false;$('foot').hidden=false;$('changeBtn').hidden=false;$('export').disabled=false;
   scaleNote();buildSel();fit()}
-function readFile(f){if(!f||!f.type.startsWith('image/'))return;const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>setPhoto(i);i.src=r.result};r.readAsDataURL(f)}
-$('file').onchange=e=>readFile(e.target.files[0]);$('file2').onchange=e=>readFile(e.target.files[0]);
+function readFile(f){if(!f||(f.type&&!f.type.startsWith('image/')))return;const u=URL.createObjectURL(f),i=new Image();i.onload=()=>{setPhoto(i);URL.revokeObjectURL(u)};i.onerror=()=>URL.revokeObjectURL(u);i.src=u}
+$('file').onchange=$('file2').onchange=e=>{readFile(e.target.files[0]);e.target.value=''};
 const em=$('empty');['dragenter','dragover'].forEach(t=>$('stage').addEventListener(t,e=>{e.preventDefault();em.classList.add('over')}));
 ['dragleave','drop'].forEach(t=>$('stage').addEventListener(t,e=>{e.preventDefault();em.classList.remove('over')}));
 $('stage').addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
